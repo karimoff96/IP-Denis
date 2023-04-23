@@ -1,22 +1,31 @@
-import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.utils import executor
+from environs import Env
 import requests
 import datetime
+import logging
 import random
 
 # Set up logging
+env = Env()
+env.read_env()
 logging.basicConfig(level=logging.INFO)
 
 # Initialize bot and dispatcher
-API_TOKEN = "5916180901:AAEMs2myndk2LH_vTyuxmB1euuYgSGJtdHU"
-weather_token = "22c3404f1e8a2de09be11fefcf2a15b9"
-exchangerate_token = "DzBwQounUnjGrNUacQWDDQmpJ49pfWEP"
-random_images_token = "T8fZ8selYoqCnCQdrhDYlGP89EjN1TpOw54MonjcM06LKRpNoY4ZmZSj"
-bot = Bot(token=API_TOKEN, parse_mode=types.ParseMode.HTML)
+# Create .env file and put your bot token inside the file or just put your token here
+BOT_TOKEN = env.str("BOT_TOKEN")
+
+# In order not to take testers additional time and efford, I am leaving these API_TOKENs open.
+weather_token = (
+    "22c3404f1e8a2de09be11fefcf2a15b9"  # The source "https://openweathermap.org/"
+)
+exchangerate_token = (
+    "DzBwQounUnjGrNUacQWDDQmpJ49pfWEP"  # The source "https://apilayer.com/"
+)
+random_images_token = "T8fZ8selYoqCnCQdrhDYlGP89EjN1TpOw54MonjcM06LKRpNoY4ZmZSj"  # the source is "https://api.pexels.com"
+bot = Bot(token=BOT_TOKEN, parse_mode=types.ParseMode.HTML)
 dp = Dispatcher(bot)
 user_inputs = {"TO": "", "FROM": ""}
-poll = {}
 
 
 # Start command handler
@@ -37,10 +46,14 @@ async def send_welcome(message: types.Message):
 # Создать опрос commanda handler
 @dp.message_handler(lambda message: message.text == "Создать опрос")
 async def create_poll_handler(message: types.Message):
+    but1 = types.KeyboardButton(text="Назад")
+    button = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    button.add(but1)
     # Ask for the poll question and options
     await bot.send_message(
         chat_id=message.chat.id,
         text="Введите вопрос для опроса и варианты ответов через запятую: ",
+        reply_markup=button,
     )
 
     # Define a message handler to handle the user's response to the question prompt
@@ -100,7 +113,8 @@ async def handle_location(message: types.Message):
         f"""Погода на сегодня:\n\nПогода: {res["weather"][0]["description"]}\nТемпература: {str(res["main"]["temp"])}°\nОщущается как: {str(res["main"]["feels_like"])}°\nВлажность: {str(res["main"]["humidity"])}%\nВосход: {datetime.datetime.fromtimestamp(res["sys"]["sunrise"]).strftime("%H:%M:%S")}\nЗакат: {datetime.datetime.fromtimestamp(res["sys"]["sunset"]).strftime("%H:%M:%S")}\nГород: {res["name"]}\nВремя обновнении: {datetime.datetime.fromtimestamp(res["timezone"]).strftime("%H:%M")}"""
     )
 
-#Convertation command handler
+
+# Convertation command handler
 @dp.message_handler(lambda message: message.text == "Конвертация валют")
 async def convertation(message: types.Message):
     but1 = types.KeyboardButton("RUB>USD")
@@ -112,7 +126,8 @@ async def convertation(message: types.Message):
     button.add(but1, but2, but3, but4, but5)
     await message.answer("Выберите вариант конвертации!", reply_markup=button)
 
-#Convertation types reciever handler
+
+# Convertation types reciever handler
 @dp.message_handler(
     lambda message: message.text in ["RUB>USD", "USD>RUB", "RUB>CNY", "RUB>KRW"]
 )
@@ -123,7 +138,8 @@ async def currency_handeler(message: types.Message):
     user_inputs["FROM"] = currency[0]
     await message.answer("Ведиде сумму:")
 
-#Hanlder for handling only inputted digits from user and colculating the convertation result 
+
+# Hanlder for handling only inputted digits from user and colculating the convertation result
 @dp.message_handler(lambda message: message.text.isdigit())
 async def sum_handler(message: types.Message):
     global user_inputs
@@ -134,9 +150,11 @@ async def sum_handler(message: types.Message):
     data = f"""Время : {datetime.datetime.fromtimestamp(response['info']['timestamp']).strftime("%H:%M:%S")}\nДата: {response['date']}\nРезультат: {user_inputs['FROM']} {message.text}  = {user_inputs['TO']} {round(response['result'], 1)} """
     await message.answer(data)
 
-#Random image send command handler
-@dp.message_handler(lambda message: message.text == "Рандом фото")
+
+# Random image send command handler
+@dp.message_handler(lambda message: message.text in ["Рандом фото", "Другой фото"])
 async def random_photo_sender(message: types.Message):
+    await message.answer("Работаю...")
     headers = {
         "Authorization": random_images_token,
     }
@@ -144,22 +162,23 @@ async def random_photo_sender(message: types.Message):
     response = requests.get(
         "https://api.pexels.com/v1/search", headers=headers, params=params
     )
-    if response.status_code == 200:
-        data = response.json()
-        total_pages = data["total_results"]
-        random_page = random.randint(1, total_pages)
-        params["page"] = random_page
+    data = response.json()
+    total_pages = data["total_results"]
+    random_page = random.randint(1, total_pages)
+    params["page"] = random_page
 
-        response = requests.get(
-            "https://api.pexels.com/v1/search", headers=headers, params=params
-        )
-        data = response.json()
-        photo_url = data["photos"][0]["src"]["large"]
-        await message.answer_photo(
-            photo_url, caption="Линк фотки: {}".format(photo_url)
-        )
-    else:
-        await message.answer("Не удалось получить фото :(\nПопробуюте сново!")
+    response = requests.get(
+        "https://api.pexels.com/v1/search", headers=headers, params=params
+    )
+    data = response.json()
+    photo_url = data["photos"][0]["src"]["large"]
+    but = types.KeyboardButton(text="Другой фото")
+    but1 = types.KeyboardButton(text="Назад")
+    button = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    button.add(but, but1)
+    await message.answer_photo(
+        photo_url, caption="Линк фотки: {}".format(photo_url), reply_markup=button
+    )
 
 
 # Back button handlar
@@ -181,3 +200,6 @@ async def send_welcome(message: types.Message):
 # Start the bot
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
+
+
+# The code can be modified and simplified and devided into more modules/files but because of some reasons I couldn`t spend much time on this project sorry for that
